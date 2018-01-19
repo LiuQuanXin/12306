@@ -1,0 +1,198 @@
+#!/usr/bin/python
+# -*- coding: utf-8 -*-
+
+import requests
+from settings import *
+from cons  import *
+import user,time
+from damatuWeb import getCode
+import urllib,re
+from message import message
+def queryTicket():
+    url = 'https://kyfw.12306.cn/otn/leftTicket/queryZ?leftTicketDTO.train_date={}&leftTicketDTO.from_station={}&leftTicketDTO.to_station={}&purpose_codes=ADULT'.format(TRAIN_DATE, from_station, to_station)
+    response = req.get(url)
+    # print(response.text)
+    result = response.json()
+    return result['data']['result']
+
+def login():
+    img_url = 'https://kyfw.12306.cn/passport/captcha/captcha-image?login_site=E&module=login&rand=sjrand&0.14524257342438318'
+    response = req.get(img_url)
+    codeImg = response.content
+    fn = open('code.png', 'wb')
+    fn.write(codeImg)
+    fn.close()
+    print('正在识别验证码')
+    data = {
+        'answer':getCode(),
+        'login_site':'E',
+        'rand':'sjrand'
+    }
+    print(data['answer'])
+    code_url = 'https://kyfw.12306.cn/passport/captcha/captcha-check'
+    response = req.post(code_url,data = data,headers = headers)
+    # print(response)
+    result = response.json()
+    # print(result)
+    if result['result_code'] != '4':
+        login()
+        return
+    data = {
+        'username':user.user,
+        'password':user.pwd,
+        'appid':'otn'
+    }
+    response = req.post('https://kyfw.12306.cn/passport/web/login', data = data, headers = headers)
+    result = response.json()
+    print(result)
+    if result['result_code'] != 0:
+        login()
+        return
+    response = req.post('https://kyfw.12306.cn/otn/login/userLogin', data={'_json_att': ''}, headers = headers)
+    print(response.url)
+    # print(response.text)
+    response = req.post('https://kyfw.12306.cn/passport/web/auth/uamtk', data={'appid': 'otn'}, headers = headers)
+    tk = response.json()['newapptk']
+    response = req.post('https://kyfw.12306.cn/otn/uamauthclient', data = {'tk': tk}, headers = headers)
+    print(response.text)
+    #   验证请求是否成功，可以查到用户名
+    # response = req.get('https://kyfw.12306.cn/otn/index/initMy12306',headers = headers)
+    # print(response.text)
+    print('登录成功')
+
+def order(secretStr):
+    response = req.post('https://kyfw.12306.cn/otn/login/checkUser', data = {'_json_att': ''}, headers = headers)
+    # print(response.text)
+    result = response.json()['data']['flag']
+    if not result:
+        print('下单第一步请求失败!..')
+        return
+    print('下单第一步请求成功!')
+    secretStr = urllib.parse.unquote(secretStr)
+    data = {
+        'secretStr':secretStr,
+    'train_date':TRAIN_DATE,
+    'back_train_date':'{}-0{}-{}'.format(sj[0], sj[1], sj[2]),
+    'tour_flag':'dc',
+    'purpose_codes':'ADULT',
+    'query_from_station_name':from_station,
+    'query_to_station_name':to_station,
+    'undefined':''
+    }
+    response = req.post('https://kyfw.12306.cn/otn/leftTicket/submitOrderRequest',data = data ,headers = headers)
+    print(response.text)
+    result = response.json()['status']
+    if not result:
+        print('下单第二步请求失败!')
+        return
+    print('下单第二步请求成功!')
+    # 下单第三个请求
+    data = {
+        '_json_att': ''
+            }
+    response = req.post('https://kyfw.12306.cn/otn/confirmPassenger/initDc', data = data,headers = headers)
+    result = response.text
+    reg = r"globalRepeatSubmitToken = '(.*?)'"
+    REPEAT_SUBMIT_TOKEN = re.findall(reg, result)
+    reg = r"'key_check_isChange':'(.*?)'"
+    key_check_isChange = re.findall(reg, result)[0]
+    data = {
+        '_json_att': '',
+        'REPEAT_SUBMIT_TOKEN': REPEAT_SUBMIT_TOKEN
+    }
+    response = req.post('https://kyfw.12306.cn/otn/confirmPassenger/getPassengerDTOs', data = data,
+                        headers = headers)
+    result = response.json()
+    print(result)
+    if not result['status']:
+        print('下单第三步请求失败...')
+        return
+    print('下单第三步请求成功!')
+    # 第四次请求
+    data = {
+        'cancel_flag': '2',
+        'bed_level_order_num': '000000000000000000000000000000',
+        'passengerTicketStr': '个人信息',   #   个人信息
+        'oldPassengerStr': '个人信息',
+        'tour_flag': 'dc',
+        'randCode': '',
+        'whatsSelect': '1',
+        '_json_att': '',
+        'REPEAT_SUBMIT_TOKEN': REPEAT_SUBMIT_TOKEN
+    }
+    response = req.post('https://kyfw.12306.cn/otn/confirmPassenger/checkOrderInfo', data=data,
+                        headers=headers)
+    print(response.text)
+    print('下单第四步请求成功!')
+    # 第五个请求
+    data = {
+        'train_date': 'Sun Feb 11 2018 00:00:00 GMT+0800 (中国标准时间)',
+        'train_no': train_no,
+        'stationTrainCode': stationTrainCode,
+        'seatType': '1',        #   座位类型   3 硬卧
+        'fromStationTelecode': fromStationTelecode,
+        'toStationTelecode': toStationTelecode,
+        'leftTicket': leftTicket,
+        'purpose_codes': '00',
+        'train_location': train_location,
+        '_json_att': '',
+        'REPEAT_SUBMIT_TOKEN': REPEAT_SUBMIT_TOKEN,
+    }
+    response = req.post('https://kyfw.12306.cn/otn/confirmPassenger/getQueueCount', data=data, headers=headers)
+    print(response.text)
+    print('下单第五步请求成功!')
+    # 第6步
+    data = {
+        'passengerTicketStr': '个人信息',
+        'oldPassengerStr': '个人信息',
+        'randCode': '',
+        'purpose_codes': '00',
+        'key_check_isChange': key_check_isChange,
+        'leftTicketStr': leftTicket,
+        'train_location': train_location,
+        'choose_seats': '',
+        'seatDetailType': '000',
+        'whatsSelect': '1',
+        'roomType': '00',
+        'dwAll': 'N',
+        '_json_att': '',
+        'REPEAT_SUBMIT_TOKEN': REPEAT_SUBMIT_TOKEN
+    }
+    response = req.post('https://kyfw.12306.cn/otn/confirmPassenger/confirmSingleForQueue', data=data,headers=headers)
+    print(response.text)
+    print('下单成功!')
+    message()
+    return False
+if __name__ == '__main__':
+    from_station = station[FROM_STATION]
+    to_station = station[TO_STATION]
+    sj = time.localtime()
+    req = requests.Session()
+    tmp = True
+    n=0
+    while tmp:
+        try:
+            print(n)
+            result = queryTicket()
+            for i in result:
+                tmp_list = i.split('|')
+                set = tmp_list[SET]
+                secretStr = tmp_list[0]
+                train_no = tmp_list[2]
+                stationTrainCode = tmp_list[3]   #  车次
+                fromStationTelecode = tmp_list[6]   # 出发站
+                toStationTelecode = tmp_list[7]  # 到达站
+                leftTicket = tmp_list[12]
+                train_location = tmp_list[15]
+                if stationTrainCode in station_lists:
+                    print(stationTrainCode)
+                    if set == '' or set == '无':
+                        pass
+                        # print('无票', tmp_list[SET], tmp_list[3])
+                    else:
+                        print('硬座', tmp_list[SET], tmp_list[3])
+                        login()
+                        tmp = order(secretStr)
+        except:
+            pass
+        n += 1
