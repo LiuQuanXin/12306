@@ -1,0 +1,19 @@
+# !/usr/bin/env python
+# -*- coding:utf-8 -*-
+
+
+TRAIN_DATE = '2018-02-12'
+FROM_STATION = ''
+TO_STATION = ''
+SET = 26
+
+# 预定车次
+station_lists = ['','','']
+
+'''
+23 = 软卧
+28 = 硬卧
+3 = 车次
+29 = 硬座
+26 = 无座
+'''
