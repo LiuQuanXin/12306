@@ -1,0 +1,14 @@
+# !/usr/bin/env python
+# -*- coding:utf-8 -*-
+
+# 12306
+user=''
+pwd=''
+
+# dama2
+codeUser = ''
+codePwd = ''
+
+# twilio
+ACCOUNT_SID = ''
+AUTH_TOKEN = ''
